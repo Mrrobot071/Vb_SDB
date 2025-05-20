@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Extrair Números com Início 45</title>
+</head>
+<body>
+    <h1>Extrair Números Iniciando com 45</h1>
+    <textarea id="inputText" rows="10" cols="50" placeholder="Cole aqui a string bruta..."></textarea><br><br>
+    <button onclick="extrairNumeros()">Extrair e Gerar Arquivo TXT</button>
+    <p id="mensagem" style="color: red; font-weight: bold;"></p>
+
+    <script>
+        function extrairNumeros() {
+            const texto = document.getElementById('inputText').value;
+            const mensagem = document.getElementById('mensagem');
+            mensagem.textContent = '';
+
+            // Expressão regular para encontrar números iniciados por 45 (sequência contínua de dígitos)
+            // Sem exigir espaços, pode estar dentro de outras strings
+            const regex = /45\d+/g;
+
+            const numerosEncontrados = texto.match(regex);
+
+            if (numerosEncontrados && numerosEncontrados.length > 0) {
+                // Remover duplicatas se houver
+                const numerosUnicos = [...new Set(numerosEncontrados)];
+
+                // Criar conteúdo para o arquivo txt
+                const listaDeNumeros = numerosUnicos.join('\n');
+
+                // Criar e disparar download do arquivo txt
+                const blob = new Blob([listaDeNumeros], { type: 'text/plain' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'numeros_com_45.txt';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } else {
+                mensagem.textContent = "Nenhum número começando com 45 foi encontrado.";
+            }
+        }
+    </script>
+</body>
+</html>
