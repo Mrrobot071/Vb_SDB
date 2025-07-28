@@ -1,0 +1,249 @@
+Function Set_NewSheet(BaseSheet As String, newSheetName As String)
+    Sheets(BaseSheet).Copy After:=Sheets(Sheets.Count)
+    
+    Dim newSheet
+    
+    newSheet = Get_LastSheet
+    Sheets(newSheet).Name = newSheetName
+    
+    Dim tableObj As Range
+    
+    Set tableObj = Range("G13:I" & Range("I" & Rows.Count).End(xlUp).Row + 1)
+    
+    tableObj.ClearContents
+    
+    Dim splitMesAno
+
+    splitMesAno = Split(newSheetName, "_", 2)
+    
+    With ActiveSheet
+        .Shapes("MesAno").TextFrame2.TextRange.Characters.Text = splitMesAno(0) & "/" & splitMesAno(1)
+    End With
+    
+End Function
+
+Function Get_NextDate(lastSheet As String) As String
+    Dim NextDate As Date
+    Dim SplitDate
+    
+    SplitDate = Split(lastSheet, "_", 2)
+    
+    Get_NextDate = StrConv(Format(DateAdd("m", 1, DateValue(SplitDate(0) & " 10, " & SplitDate(1))), "mmmm_yyyy"), vbProperCase)
+    
+End Function
+
+Function Get_LastSheet() As String
+    Get_LastSheet = Worksheets(Worksheets.Count).Name
+    
+End Function
+
+Sub Abrir_Mes()
+    Dim lastSheet As String
+    Dim newSheet As String
+    
+    Application.ScreenUpdating = False
+    
+    lastSheet = Get_LastSheet
+    newSheet = Get_NextDate(lastSheet)
+    
+    Call Set_NewSheet(lastSheet, newSheet)
+    
+    For i = 13 To Range("I" & Rows.Count).End(xlUp).Row
+        Cells(i, 10).Interior.Color = xlColorIndexNone
+    Next i
+    
+    Application.ScreenUpdating = True
+    
+End Sub
+--------------------------------------------
+
+Function RangetoHTML(rng As Range)
+Dim obj As Object
+Dim txtstr As Object
+Dim File As String
+Dim WB As Workbook
+File = Environ$("temp") & "\" & Format(Now, "dd-mm-yy h-mm-ss") & ".htm"
+rng.Copy
+Set WB = Workbooks.Add(1)
+With WB.Sheets(1)
+.Cells(1).PasteSpecial Paste:=8
+.Cells(1).PasteSpecial xlPasteValues, , False, False
+.Cells(1).PasteSpecial xlPasteFormats, , False, False
+.Cells(1).Select
+Application.CutCopyMode = False
+On Error Resume Next
+.DrawingObjects.Visible = True
+.DrawingObjects.Delete
+On Error GoTo 0
+End With
+With WB.PublishObjects.Add( _
+SourceType:=xlSourceRange, _
+Filename:=File, _
+Sheet:=WB.Sheets(1).Name, _
+Source:=WB.Sheets(1).UsedRange.Address, _
+HtmlType:=xlHtmlStatic)
+.Publish (True)
+End With
+Set obj = CreateObject("Scripting.FileSystemObject")
+Set txtstr = obj.GetFile(File).OpenAsTextStream(1, -2)
+RangetoHTML = txtstr.readall
+txtstr.Close
+RangetoHTML = Replace(RangetoHTML, "align=center x:publishsource=", _
+"align=left x:publishsource=")
+WB.Close savechanges:=False
+Kill File
+Set txtstr = Nothing
+Set obj = Nothing
+Set WB = Nothing
+End Function
+Function set_modified(User As String)
+    Dim dataAtual
+    dataAtual = Date
+    
+    Dim horaAtual
+    horaAtual = Time
+
+    With ActiveSheet
+        .Shapes("CaixaDeTexto 7").TextFrame2.TextRange.Characters.Text = "Última modificação em " & Format(dataAtual, "dd/mm/yyyy") & " ás " & Format(horaAtual, "hh:mm") & " pelo usuário " & User & "."
+    End With
+    
+End Function
+
+Function eraseTable(TableContent As Range)
+    TableContent.Delete
+End Function
+
+Function get_DefaultMessage(TableContent As Range) As String
+    Dim dataAtual
+    dataAtual = Date
+    
+    TableContent.Select
+    
+    get_DefaultMessage = "<HTML><BODY>Boa tarde!<br><br>Segue aprovações de crachás realizadas hoje, " & Format(dataAtual, "dd/mm/yyyy") & ".<br>" & RangetoHTML(TableContent) & "<\BODY><\HTML>"
+    
+End Function
+
+Function set_NewTable(SelRange As Range) As ListObject
+    SelRange.Copy Destination:=ActiveSheet.Range("L13")
+    Range("G12:I12").Copy Destination:=ActiveSheet.Range("L12")
+    
+    Dim TB_temp As ListObject
+    
+    Set TB_temp = ActiveSheet.ListObjects.Add(xlSrcRange, Range("L12:N" & 12 + SelRange.Rows.Count), , xlYes)
+    
+    TB_temp.TableStyle = "TableStyleDark8"
+    
+    Set set_NewTable = TB_temp
+End Function
+
+Sub get_mailFromSelection(Optional external_table As Variant)
+    Application.ScreenUpdating = False
+    
+    Dim has_externalTable As Boolean
+    has_externalTable = IIf(IsMissing(external_table), False, True)
+    
+    Dim SelRange As Range
+    Set SelRange = Selection
+    
+    'Email'
+    Dim OTLK_APP As Outlook.Application
+    Set OTLK_APP = New Outlook.Application
+    Dim OTLK_Mail As Outlook.MailItem
+    Set OTLK_Mail = OTLK_APP.CreateItem(olMailItem)
+    
+    OTLK_Mail.Save
+    
+    Dim currentUser As String
+    currentUser = Application.UserName
+    
+    Dim cc_input As String
+    
+    Select Case currentUser
+    Case "Maria Santana"
+        cc_input = "ana.espinola@allos.co;milena.santos@allos.co"
+    Case "Ana Espinola"
+        cc_input = "milena.santos@allos.co"
+    Case "Silas Santos"
+        cc_input = "ana.espinola@allos.co;milena.santos@allos.co"
+    Case "fabiane Santos"
+        cc_input = "ana.espinola@allos.co;milena.santos@allos.co"
+    Case "Milena de Jesus Santos"
+        cc_input = "ana.espinola@allos.co;fabiane.santos@allos.co"
+    Case Default
+        cc_input = "ana.espinola@allos.co"
+    End Select
+    
+    Dim tempTable As ListObject
+    
+    If has_externalTable = True Then
+        Set tempTable = external_table
+    Else
+        Set tempTable = set_NewTable(SelRange)
+    End If
+    
+    With OTLK_Mail
+        .BodyFormat = olFormatHTML
+        .Display
+        .HTMLBody = get_DefaultMessage(tempTable.Range) & .HTMLBody
+        .To = "e-andre.carlos@allos.co;victor.rejala@allos.co"
+        .CC = cc_input
+        .Subject = "Aprovação de Crachás Refeitório"
+    End With
+    
+    Dim r As Range
+    If has_externalTable = True Then
+        Dim lr
+        
+        lr = Range("H" & Rows.Count).End(xlUp).Row
+    
+        For i = 13 To lr
+            If Cells(i, 10).Interior.Color = 192 Then
+                Cells(i, 10).Interior.Color = 5287936
+            End If
+        Next i
+    Else
+        For Each r In SelRange.Rows
+            If Cells(r.Row, 10).Interior.Color = 192 Then
+                Cells(r.Row, 10).Interior.Color = 5287936
+            End If
+        Next r
+    
+    tempTable.Range.Clear
+    End If
+    
+    Call set_modified(currentUser)
+    
+    Application.ScreenUpdating = True
+End Sub
+
+Sub get_mailNotSent()
+    Application.ScreenUpdating = False
+    
+    Dim TB_aux As ListObject
+    Set TB_aux = ActiveSheet.ListObjects(3)
+    
+    Dim lr As String, hr_aux
+    lr = Range("H" & Rows.Count).End(xlUp).Row
+    hr_aux = 501
+    
+    Range("G12:I12").Copy Destination:=ActiveSheet.Range("L500")
+    
+    With ActiveSheet
+    For i = 13 To lr
+        If Cells(i, 10).Interior.Color = 192 Then
+            Range("G" & i & ":I" & i).Copy Destination:=ActiveSheet.Range("L" & hr_aux)
+            TB_aux.Resize TB_aux.Range.Resize((hr_aux - 500) + 1)
+            
+            hr_aux = hr_aux + 1
+        End If
+    Next i
+
+    Call get_mailFromSelection(TB_aux)
+    
+    TB_aux.DataBodyRange.Clear
+    
+    End With
+    
+    Application.ScreenUpdating = True
+End Sub
+---------------------------------------------
