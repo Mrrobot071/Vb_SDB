@@ -1,0 +1,177 @@
+vba extração de pedidos atualizado:
+ 
+Sub ExtrairNaoLidosNotasCamposNoPedidoSeparado()
+    Dim olApp As Object, olNamespace As Object, olFolder As Object, olSubFolder As Object
+    Dim olMail As Object
+    Dim ws As Worksheet
+    Dim i As Long, linhaAtual As Long
+    Dim linhas() As String
+    Dim linhaLimpa As String
+    Dim conteudoExtraido As String
+    Dim campos As Variant
+    Dim campo As Variant
+    Dim encontrouInfo As Boolean
+    
+    On Error GoTo TratarErro
+    
+    ' Inicializar Outlook
+    Set olApp = CreateObject("Outlook.Application")
+    Set olNamespace = olApp.GetNamespace("MAPI")
+    
+    ' Obter pasta "NFE\01.NOTAS"
+    Set olFolder = olNamespace.GetDefaultFolder(6) ' Inbox
+    Set olSubFolder = GetFolder(olFolder, "NFE\01.NOTAS")
+    If olSubFolder Is Nothing Then
+        MsgBox "Pasta 'NFE\01.NOTAS' não encontrada!", vbCritical
+        Exit Sub
+    End If
+    
+    ' Configurar planilha
+    Set ws = ThisWorkbook.Sheets("Dados")
+    ws.Cells.Clear
+    
+    ' Cabeçalho atualizado para incluir coluna D
+    With ws.Range("A1:D1")
+        .Value = Array("DATA RECEBIMENTO", "REMETENTE", "CONTEÚDO DO E-MAIL", "NÚMERO INICIADO EM 45")
+        .Font.Bold = True
+        .Interior.Color = RGB(220, 230, 241)
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+        .WrapText = True
+    End With
+    
+    linhaAtual = 2
+    
+    ' Campos que queremos extrair para o conteúdo (incluindo PEDIDO)
+    campos = Array("PEDIDO:", "OC:", "Nº NOTA FISCAL:", "VALOR:", "VENCIMENTO:", _
+                   "FORMA DE PAGAMENTO:", "COMPRADOR:", "FORNECEDOR:", "OBS.")
+    
+    ' Loop em todos os e-mails não lidos da pasta
+    For Each olMail In olSubFolder.Items
+        If olMail.Class = 43 And olMail.UnRead = True Then
+            conteudoExtraido = ""
+            encontrouInfo = False
+            
+            ' Quebra o corpo em linhas para buscar os campos específicos
+            linhas = Split(olMail.Body, vbCrLf)
+            For i = LBound(linhas) To UBound(linhas)
+                linhaLimpa = Trim(Replace(linhas(i), "?", ""))
+                
+                For Each campo In campos
+                    If InStr(1, linhaLimpa, campo, vbTextCompare) > 0 Then
+                        ' Limpar espaços/tabulações entre ":" e valor
+                        linhaLimpa = LimparEspacosAposDoisPontos(linhaLimpa)
+                        
+                        ' Adiciona a linha limpa ao conteúdo extraído, com quebra de linha
+                        If conteudoExtraido <> "" Then
+                            conteudoExtraido = conteudoExtraido & vbCrLf
+                        End If
+                        conteudoExtraido = conteudoExtraido & linhaLimpa
+                        encontrouInfo = True
+                        Exit For
+                    End If
+                Next campo
+            Next i
+            
+            ' Marcar e-mail como lido e salvar
+            olMail.UnRead = False
+            olMail.Save
+            
+            ' Se não encontrou nenhum campo, colocar mensagem padrão
+            If Not encontrouInfo Then
+                conteudoExtraido = "Nenhuma informação relevante encontrada"
+            End If
+            
+            ' Preencher dados na planilha
+            With ws.Cells(linhaAtual, 1)
+                If IsDate(olMail.ReceivedTime) Then
+                    .Value = olMail.ReceivedTime
+                    .NumberFormat = "dd/mm/yyyy"
+                Else
+                    .Value = ""
+                End If
+            End With
+            
+            ws.Cells(linhaAtual, 2).Value = olMail.SenderName
+            ws.Cells(linhaAtual, 3).Value = conteudoExtraido
+            
+            ' Extrair número iniciado em 45 da coluna C e colocar na coluna D
+            ws.Cells(linhaAtual, 4).Value = ExtrairNumero45(conteudoExtraido)
+            
+            linhaAtual = linhaAtual + 1
+        End If
+    Next olMail
+    
+    ' Formatar planilha
+    With ws.UsedRange
+        .HorizontalAlignment = xlLeft
+        .VerticalAlignment = xlTop
+        .WrapText = True
+        .Columns.AutoFit
+    End With
+    
+    ' Limpar objetos
+    Set olMail = Nothing
+    Set olSubFolder = Nothing
+    Set olFolder = Nothing
+    Set olNamespace = Nothing
+    Set olApp = Nothing
+    
+    Exit Sub
+    
+TratarErro:
+    MsgBox "Erro " & Err.Number & ": " & Err.Description, vbCritical
+End Sub
+ 
+' Função para limpar espaços e tabulações entre ":" e o valor
+Function LimparEspacosAposDoisPontos(texto As String) As String
+    Dim pos As Long
+    Dim campo As String, valor As String
+    
+    pos = InStr(texto, ":")
+    If pos > 0 Then
+        campo = Left(texto, pos) ' inclui os dois pontos
+        valor = Mid(texto, pos + 1)
+        ' Remove todos os espaços e tabs do início do valor
+        valor = LTrim(valor)
+        LimparEspacosAposDoisPontos = campo & valor
+    Else
+        LimparEspacosAposDoisPontos = texto
+    End If
+End Function
+ 
+' Função para obter pasta via caminho
+Function GetFolder(ByVal rootFolder As Object, ByVal folderPath As String) As Object
+    Dim arrFolders() As String
+    Dim i As Integer
+    Dim folder As Object
+    
+    arrFolders = Split(folderPath, "\")
+    Set folder = rootFolder
+    
+    For i = LBound(arrFolders) To UBound(arrFolders)
+        On Error Resume Next
+        Set folder = folder.Folders(arrFolders(i))
+        On Error GoTo 0
+        If folder Is Nothing Then Exit For
+    Next i
+    
+    Set GetFolder = folder
+End Function
+ 
+' Função para extrair número iniciado em 45 de um texto
+Function ExtrairNumero45(texto As String) As String
+    Dim regex As Object
+    Dim matches As Object
+    
+    Set regex = CreateObject("VBScript.RegExp")
+    regex.Pattern = "45\d+"   ' Número que começa com 45 seguido de dígitos
+    regex.Global = False
+    
+    If regex.Test(texto) Then
+        Set matches = regex.Execute(texto)
+        ExtrairNumero45 = matches(0).Value
+    Else
+        ExtrairNumero45 = "" ' Não encontrou
+    End If
+End Function
