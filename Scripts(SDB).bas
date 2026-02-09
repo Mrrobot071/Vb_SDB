@@ -138,7 +138,7 @@ MarcarELerProximo:
                         valorNum = ToNumberBR(valorTxt)
                         If Not IsError(valorNum) And Not IsEmpty(valorNum) Then
                             ws.Cells(linhaAtual, 5).Value = CDbl(valorNum)
-                            ws.Cells(linhaAtual, 5).NumberFormat = "R$ #.##0,00"
+                            ws.Cells(linhaAtual, 5).NumberFormat = "$ #.##0,00"
                         End If
                     End If
                     
@@ -410,6 +410,9 @@ Function IsInArray(ByVal val As String, ByVal arr As Variant) As Boolean
         End If
     Next
 End Function
+
+
+
 
 
 
@@ -1289,6 +1292,361 @@ End Function
 
 OUTLOOK
 
+Sub ProcurarTextoNaColunaO()
+
+    Dim mailItem As Object
+    Dim selectedText As String
+    Dim excelApp As Object
+    Dim wb As Object
+    Dim ws As Object
+    Dim cell As Object
+    Dim wbName1 As String
+    Dim wbName2 As String
+    Dim encontrado As Boolean
+    Dim procurouPrimeiro As Boolean
+
+    ' === Obter item ativo e texto selecionado ===
+    On Error Resume Next
+    Set mailItem = Application.ActiveInspector.CurrentItem
+    On Error GoTo 0
+
+    If mailItem Is Nothing Then
+        MsgBox "Nenhum e-mail ativo.", vbExclamation
+        Exit Sub
+    End If
+
+    selectedText = Trim(Application.ActiveInspector.WordEditor.Application.Selection.Text)
+
+    ' Limpar caracteres invisíveis
+    selectedText = Replace(selectedText, vbCrLf, "")
+    selectedText = Replace(selectedText, vbLf, "")
+    selectedText = Replace(selectedText, vbCr, "")
+    selectedText = Replace(selectedText, Chr(160), "") ' espaço não separável
+    selectedText = Trim(selectedText)
+
+    If Len(selectedText) = 0 Then
+        MsgBox "Selecione um texto válido no corpo do e-mail.", vbExclamation
+        Exit Sub
+    End If
+
+    ' === Conectar ao Excel ===
+    Set excelApp = GetObject(, "Excel.Application")
+    If excelApp Is Nothing Then
+        MsgBox "Excel não está aberto.", vbCritical
+        Exit Sub
+    End If
+
+    ' === Nomes das planilhas (workbooks) ===
+    wbName1 = "Planilha de Chamados IARA+ 2025 v8 - 122025.xlsx"
+    wbName2 = "Planilha de Chamados IARA+ 2025 v8 - 012026.xlsx"
+
+    ' ===== Função local para obter workbook por nome exato entre os abertos =====
+    Dim FunctionGetWb As Object
+    ' (usaremos Set wb = Nothing e loop direto abaixo para evitar criar função separada)
+
+    ' === Tenta procurar no primeiro workbook (122025) ===
+    Set wb = Nothing
+    Dim wbLoop As Object
+    For Each wbLoop In excelApp.Workbooks
+        If wbLoop.Name = wbName1 Then
+            Set wb = wbLoop
+            Exit For
+        End If
+    Next wbLoop
+
+    procurouPrimeiro = False
+    encontrado = False
+
+    If Not wb Is Nothing Then
+        procurouPrimeiro = True
+
+        ' Tenta obter a aba
+        On Error Resume Next
+        Set ws = wb.Sheets("Preechimento") ' ajuste se o nome correto for "Preenchimento"
+        On Error GoTo 0
+
+        If Not ws Is Nothing Then
+            For Each cell In ws.Range("O1:O3000")
+                If StrComp(Trim(CStr(cell.Value)), selectedText, vbTextCompare) = 0 Then
+                    encontrado = True
+                    MsgBox "Texto encontrado na célula " & cell.Address & _
+                           " da aba '" & ws.Name & "' em '" & wb.Name & "'.", vbInformation
+                    excelApp.Visible = True
+                    wb.Activate
+                    ws.Activate
+                    cell.Select
+                    cell.Application.GoTo cell, True
+                    Exit Sub
+                End If
+            Next cell
+        End If
+        ' Se chegou aqui, não encontrou no primeiro workbook (ou aba inexistente)
+    End If
+
+    ' === Tenta procurar no segundo workbook (012026) ===
+    Set wb = Nothing
+    For Each wbLoop In excelApp.Workbooks
+        If wbLoop.Name = wbName2 Then
+            Set wb = wbLoop
+            Exit For
+        End If
+    Next wbLoop
+
+    If Not wb Is Nothing Then
+        On Error Resume Next
+        Set ws = wb.Sheets("Preechimento") ' ajuste se o nome correto for "Preenchimento"
+        On Error GoTo 0
+
+        If Not ws Is Nothing Then
+            For Each cell In ws.Range("O1:O3000")
+                If StrComp(Trim(CStr(cell.Value)), selectedText, vbTextCompare) = 0 Then
+                    encontrado = True
+                    MsgBox "Texto encontrado na célula " & cell.Address & _
+                           " da aba '" & ws.Name & "' em '" & wb.Name & "'.", vbInformation
+                    excelApp.Visible = True
+                    wb.Activate
+                    ws.Activate
+                    cell.Select
+                    cell.Application.GoTo cell, True
+                    Exit Sub
+                End If
+            Next cell
+        End If
+    End If
+
+    ' === Mensagens finais conforme resultados ===
+    If Not encontrado Then
+        Dim infoPlanilhas As String
+
+        ' Monta informação sobre disponibilidade dos arquivos
+        Dim aberto1 As Boolean, aberto2 As Boolean
+        aberto1 = False: aberto2 = False
+        For Each wbLoop In excelApp.Workbooks
+            If wbLoop.Name = wbName1 Then aberto1 = True
+            If wbLoop.Name = wbName2 Then aberto2 = True
+        Next wbLoop
+
+        If Not aberto1 And Not aberto2 Then
+            infoPlanilhas = " (Observação: nenhuma das duas planilhas está aberta no Excel.)"
+        ElseIf Not aberto1 Then
+            infoPlanilhas = " (Observação: a planilha '" & wbName1 & "' não está aberta.)"
+        ElseIf Not aberto2 Then
+            infoPlanilhas = " (Observação: a planilha '" & wbName2 & "' não está aberta.)"
+        Else
+            infoPlanilhas = ""
+        End If
+
+        MsgBox "Texto '" & selectedText & "' NÃO foi encontrado em nenhuma das duas planilhas:" & vbCrLf & _
+               " - " & wbName1 & vbCrLf & " - " & wbName2 & infoPlanilhas, vbInformation
+    End If
+
+End Sub
+
+
+                                                                                                                                                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                                                                                                                                                                
+                                                                                                                                                                                                                                                                                                                                                                                                Sub BaixarAnexosNaoLidosOLD()
+    Dim olApp As Outlook.Application
+    Dim olNamespace As Outlook.NameSpace
+    Dim olFolder As Outlook.MAPIFolder
+    Dim olSubFolder As Outlook.MAPIFolder
+    Dim olMail As Outlook.mailItem
+    Dim olAttachment As Outlook.Attachment
+    Dim pastaDestino As String
+    Dim anexosBaixados As Boolean
+    Dim item As Object
+    Dim nomeArquivo As String
+    Dim filteredItems As Outlook.items
+    
+    On Error GoTo TratamentoErro
+    
+    Set olApp = New Outlook.Application
+    Set olNamespace = olApp.GetNamespace("MAPI")
+    
+    pastaDestino = Environ$("USERPROFILE") & "\OneDrive - ALLOS\Área de Trabalho\Anexos\"
+    If Dir(pastaDestino, vbDirectory) = "" Then MkDir pastaDestino
+    
+    Set olFolder = olNamespace.GetDefaultFolder(olFolderInbox)
+    
+    ' Acesso seguro à subpasta
+    On Error Resume Next
+    Set olSubFolder = olNamespace.Folders("NFE")
+    If olSubFolder Is Nothing Then
+        Set olSubFolder = olFolder.Folders("NFE")
+    End If
+    If Not olSubFolder Is Nothing Then
+        Set olSubFolder = olSubFolder.Folders("01.NOTAS")
+    End If
+    On Error GoTo TratamentoErro
+    
+    If olSubFolder Is Nothing Then
+        MsgBox "Subpasta 'NFE > 01.NOTAS' não encontrada.", vbExclamation, "Erro"
+        GoTo Finalizar
+    End If
+    
+    anexosBaixados = False
+    
+    ' Filtro otimizado para não lidos
+    Set filteredItems = olSubFolder.items.Restrict("@SQL=""urn:schemas:httpmail:read"" = 0")
+    
+    For Each item In filteredItems
+        If TypeOf item Is Outlook.mailItem Then
+            Set olMail = item
+            For Each olAttachment In olMail.Attachments
+                If LCase(Right(olAttachment.fileName, 4)) = ".xml" Or LCase(Right(olAttachment.fileName, 4)) = ".pdf" Then
+                    nomeArquivo = pastaDestino & olAttachment.fileName
+                    
+                    If Dir(nomeArquivo) <> "" Then
+                        Dim contador As Integer
+                        contador = 1
+                        Do While Dir(Left(nomeArquivo, InStrRev(nomeArquivo, ".") - 1) & "_" & contador & Mid(nomeArquivo, InStrRev(nomeArquivo, "."))) <> ""
+                            contador = contador + 1
+                        Loop
+                        nomeArquivo = Left(nomeArquivo, InStrRev(nomeArquivo, ".") - 1) & "_" & contador & Mid(nomeArquivo, InStrRev(nomeArquivo, "."))
+                    End If
+                    
+                    olAttachment.SaveAsFile nomeArquivo
+                    anexosBaixados = True
+                End If
+            Next olAttachment
+            
+            ' Descomentar para marcar como lido
+            ' olMail.UnRead = False
+            ' olMail.Save
+        End If
+    Next item
+    
+    If anexosBaixados Then
+        MsgBox "Anexos baixados com sucesso!", vbInformation, "Sucesso"
+    Else
+        MsgBox "Nenhum anexo XML/PDF encontrado.", vbInformation, "Aviso"
+    End If
+ 
+Finalizar:
+    Set olAttachment = Nothing
+    Set olMail = Nothing
+    Set olSubFolder = Nothing
+    Set olFolder = Nothing
+    Set olNamespace = Nothing
+    Set olApp = Nothing
+    If Not filteredItems Is Nothing Then Set filteredItems = Nothing
+    Exit Sub
+ 
+TratamentoErro:
+    MsgBox "Erro " & Err.Number & ": " & Err.Description, vbCritical, "Falha"
+    Resume Finalizar
+End Sub
+
+
+
+
+
+
+Sub BaixarAnexosNaoLidosOLD()
+    Dim olApp As Outlook.Application
+    Dim olNamespace As Outlook.NameSpace
+    Dim olFolder As Outlook.MAPIFolder
+    Dim olSubFolder As Outlook.MAPIFolder
+    Dim olMail As Outlook.mailItem
+    Dim olAttachment As Outlook.Attachment
+    Dim pastaDestino As String
+    Dim anexosBaixados As Boolean
+    Dim item As Object
+    Dim nomeArquivo As String
+    Dim filteredItems As Outlook.items
+    
+    On Error GoTo TratamentoErro
+    
+    Set olApp = New Outlook.Application
+    Set olNamespace = olApp.GetNamespace("MAPI")
+    
+    pastaDestino = Environ$("USERPROFILE") & "\OneDrive - ALLOS\Área de Trabalho\Anexos\"
+    If Dir(pastaDestino, vbDirectory) = "" Then MkDir pastaDestino
+    
+    Set olFolder = olNamespace.GetDefaultFolder(olFolderInbox)
+    
+    ' Acesso seguro à subpasta
+    On Error Resume Next
+    Set olSubFolder = olNamespace.Folders("NFE")
+    If olSubFolder Is Nothing Then
+        Set olSubFolder = olFolder.Folders("NFE")
+    End If
+    If Not olSubFolder Is Nothing Then
+        Set olSubFolder = olSubFolder.Folders("01.NOTAS")
+    End If
+    On Error GoTo TratamentoErro
+    
+    If olSubFolder Is Nothing Then
+        MsgBox "Subpasta 'NFE > 01.NOTAS' não encontrada.", vbExclamation, "Erro"
+        GoTo Finalizar
+    End If
+    
+    anexosBaixados = False
+    
+    ' Filtro otimizado para não lidos
+    Set filteredItems = olSubFolder.items.Restrict("@SQL=""urn:schemas:httpmail:read"" = 0")
+    
+    For Each item In filteredItems
+        If TypeOf item Is Outlook.mailItem Then
+            Set olMail = item
+            For Each olAttachment In olMail.Attachments
+                If LCase(Right(olAttachment.fileName, 4)) = ".xml" Or LCase(Right(olAttachment.fileName, 4)) = ".pdf" Then
+                    nomeArquivo = pastaDestino & olAttachment.fileName
+                    
+                    If Dir(nomeArquivo) <> "" Then
+                        Dim contador As Integer
+                        contador = 1
+                        Do While Dir(Left(nomeArquivo, InStrRev(nomeArquivo, ".") - 1) & "_" & contador & Mid(nomeArquivo, InStrRev(nomeArquivo, "."))) <> ""
+                            contador = contador + 1
+                        Loop
+                        nomeArquivo = Left(nomeArquivo, InStrRev(nomeArquivo, ".") - 1) & "_" & contador & Mid(nomeArquivo, InStrRev(nomeArquivo, "."))
+                    End If
+                    
+                    olAttachment.SaveAsFile nomeArquivo
+                    anexosBaixados = True
+                End If
+            Next olAttachment
+            
+            ' Descomentar para marcar como lido
+            ' olMail.UnRead = False
+            ' olMail.Save
+        End If
+    Next item
+    
+    If anexosBaixados Then
+        MsgBox "Anexos baixados com sucesso!", vbInformation, "Sucesso"
+    Else
+        MsgBox "Nenhum anexo XML/PDF encontrado.", vbInformation, "Aviso"
+    End If
+ 
+Finalizar:
+    Set olAttachment = Nothing
+    Set olMail = Nothing
+    Set olSubFolder = Nothing
+    Set olFolder = Nothing
+    Set olNamespace = Nothing
+    Set olApp = Nothing
+    If Not filteredItems Is Nothing Then Set filteredItems = Nothing
+    Exit Sub
+ 
+TratamentoErro:
+    MsgBox "Erro " & Err.Number & ": " & Err.Description, vbCritical, "Falha"
+    Resume Finalizar
+End Sub
+ 
+
+
+
+
+
+
+
 Option Explicit
 
 ' ============================
@@ -1296,8 +1654,9 @@ Option Explicit
 ' ============================
 Private Const MARK_AS_READ As Boolean = False   ' True para marcar e-mail como lido após salvar
 Private Const FILTRAR_APENAS_PDF_XML As Boolean = True
+Private Const LOG_DEBUG As Boolean = True       ' Exibe motivos no Immediate (Ctrl+G)
 
-' Ajuste seu caminho padrão (conforme seu snippet)
+' Ajuste seu caminho padrão
 Private Function PASTA_BASE_DESTINO() As String
     PASTA_BASE_DESTINO = Environ$("USERPROFILE") & "\OneDrive - ALLOS\Área de Trabalho\Anexos\"
 End Function
@@ -1315,6 +1674,7 @@ Public Sub BaixarAnexosRenomeados()
     Dim filteredItems As Outlook.items
     Dim item As Object
     Dim mail As Outlook.mailItem
+    Dim att As Outlook.Attachment
     
     Dim pastaDestinoBase As String
     pastaDestinoBase = PASTA_BASE_DESTINO()
@@ -1331,7 +1691,7 @@ Public Sub BaixarAnexosRenomeados()
         GoTo Finalizar
     End If
     
-    ' Filtra somente não lidos (baseado no seu snippet)
+    ' Filtra somente não lidos
     Set filteredItems = olSubFolder.items.Restrict("@SQL=""urn:schemas:httpmail:read"" = 0")
     
     Dim anexosBaixados As Boolean
@@ -1365,15 +1725,18 @@ Public Sub BaixarAnexosRenomeados()
                 ocValido = EhPedidoOcValido(oc)
                 
                 If Not pedidoValido And Not ocValido Then
-                    ' Não baixa se não achar um pedido/oc válido
+                    If LOG_DEBUG Then Debug.Print "Ignorado e-mail sem pedido/OC válido: "; assunto
                     GoTo ProximoItem
                 End If
                 
                 Dim pedidoUsar As String
                 pedidoUsar = IIf(pedidoValido, pedido, oc)
                 
-                ' Extrai NF (só se tiver; se não, tentamos pelo nome do anexo)
-                numeroNF = RegexGetFirst(corpoLinhas, "(?:N[º°o]?\s*(?:da\s*)?Nota\s*Fiscal|NF-?e|NF)\s*[:\-–—]?\s*([A-Za-z0-9\.\-\/]+)")
+                ' Extrai NF (se houver; senão tentamos pelo nome do anexo)
+                numeroNF = Trim$(RegexGetFirst( _
+                    corpoLinhas, _
+                    "(?:N[º°o]?\s*(?:da\s*)?Nota\s*Fiscal|Nota\s*Fiscal|N[º°o]?\s*NF(?:-?e)?|NF-?e|NF)\s*[:\-–—]?\s*(\d[\dA-Za-z\.\-\/]*)" _
+                ))
                 
                 ' Extrai fornecedor; fallback = remetente
                 fornecedor = RegexGetLineValue(corpoLinhas, "Fornecedor")
@@ -1390,7 +1753,6 @@ Public Sub BaixarAnexosRenomeados()
                 EnsureFolderExistsRecursive pastaPedido
                 
                 ' Percorre anexos
-                Dim att As Outlook.Attachment
                 Dim i As Long
                 For i = 1 To mail.Attachments.Count
                     Set att = mail.Attachments(i)
@@ -1399,12 +1761,33 @@ Public Sub BaixarAnexosRenomeados()
                     nomeArq = NzStr(att.fileName)
                     ext = "." & LCase$(ObterExtensao(nomeArq))
                     
+                    ' Filtrar extensões
                     If FILTRAR_APENAS_PDF_XML Then
-                        If Not (ext = ".xml" Or ext = ".pdf") Then GoTo ProximoAnexo
+                        If Not (ext = ".xml" Or ext = ".pdf") Then
+                            If LOG_DEBUG Then Debug.Print "Ignorado (extensão não permitida): "; nomeArq
+                            GoTo ProximoAnexo
+                        End If
                     End If
                     
+                    ' ---- BLOQUEIO: não baixar se for PO (Purchase Order) pelo NOME ----
+                    If IsArquivoPO(LCase$(nomeArq)) Then
+                        If LOG_DEBUG Then Debug.Print "Ignorado (PO detectado no nome): "; nomeArq
+                        GoTo ProximoAnexo
+                    End If
+                    
+                    ' Detectar tipo (XML / BOLETO / NF / INVALIDO_PO / DESCONHECIDO)
                     Dim tipo As String
-                    tipo = DetectarTipoAnexo(nomeArq, ext) ' "XML" | "BOLETO" | "NF"
+                    tipo = DetectarTipoAnexo(nomeArq, ext)
+                    
+                    ' Se a detecção indicar PO, ou desconhecido (PDF que não é NF nem Boleto) -> pular
+                    If tipo = "INVALIDO_PO" Then
+                        If LOG_DEBUG Then Debug.Print "Ignorado (PO detectado pela detecção): "; nomeArq
+                        GoTo ProximoAnexo
+                    End If
+                    If tipo = "DESCONHECIDO" Then
+                        If LOG_DEBUG Then Debug.Print "Ignorado (PDF não reconhecido como NF/BOLETO): "; nomeArq
+                        GoTo ProximoAnexo
+                    End If
                     
                     Dim fornecedorUsar As String
                     fornecedorUsar = SafeFileComponent(fornecedor)
@@ -1421,12 +1804,16 @@ Public Sub BaixarAnexosRenomeados()
                             novoNome = prefixo & "_" & pedidoUsar & "_XML" & ext
                         Case "BOLETO"
                             novoNome = prefixo & "_" & pedidoUsar & "_BOLETO" & ext
-                        Case Else ' "NF"
+                        Case "NF"
                             If Len(nfUsar) > 0 Then
                                 novoNome = prefixo & "_" & pedidoUsar & "_NF " & nfUsar & "_" & fornecedorUsar & ext
                             Else
                                 novoNome = prefixo & "_" & pedidoUsar & "_NF_" & fornecedorUsar & ext
                             End If
+                        Case Else
+                            ' Segurança
+                            If LOG_DEBUG Then Debug.Print "Ignorado (tipo inesperado): "; nomeArq
+                            GoTo ProximoAnexo
                     End Select
                     
                     Dim destino As String
@@ -1434,11 +1821,12 @@ Public Sub BaixarAnexosRenomeados()
                     
                     att.SaveAsFile destino
                     anexosBaixados = True
+                    If LOG_DEBUG Then Debug.Print "Salvo: "; destino
 ProximoAnexo:
                 Next i
                 
-                ' Marcar como lido se desejado
-                If MARK_AS_READ Then
+                ' Marcar como lido se desejado (apenas se baixou algo deste e-mail)
+                If MARK_AS_READ And anexosBaixados Then
                     mail.UnRead = False
                     mail.Save
                 End If
@@ -1603,21 +1991,65 @@ Private Function ObterExtensao(ByVal fileName As String) As String
     End If
 End Function
 
+' -------- Checagem específica de PO (Purchase Order) --------
+' Cobre: "PO123", "reqPO123", "PO_123", "PO-123", "PO 123",
+'        "purchase order", "pedido de compra", "ordem de compra"
+Private Function IsArquivoPO(ByVal nmLower As String) As Boolean
+    Dim re As Object
+    Set re = CreateObject("VBScript.RegExp")
+    With re
+        .IgnoreCase = True
+        .Global = False
+        .Multiline = False
+        .pattern = "po\d+|(^|[^A-Za-z0-9])po([^A-Za-z0-9]|$)|purchase[\s_\-]*order|pedido[\s_\-]*de[\s_\-]*compra|ordem[\s_\-]*de[\s_\-]*compra"
+    End With
+    IsArquivoPO = re.Test(nmLower)
+End Function
+
+' -------- Detecção do tipo do anexo --------
 Private Function DetectarTipoAnexo(ByVal nomeArq As String, ByVal ext As String) As String
     Dim nm As String: nm = LCase$(nomeArq)
+    
+    ' XML -> NFe
     If ext = ".xml" Then
         DetectarTipoAnexo = "XML"
         Exit Function
     End If
-    If InStr(nm, "boleto") > 0 Or InStr(nm, "linha digit") > 0 Then
-        DetectarTipoAnexo = "BOLETO"
+    
+    ' Se o nome indicar PO -> invalidar
+    If IsArquivoPO(nm) Then
+        DetectarTipoAnexo = "INVALIDO_PO"
         Exit Function
     End If
-    If InStr(nm, "danfe") > 0 Or InStr(nm, "nf") > 0 Or InStr(nm, "nfe") > 0 Or InStr(nm, "nota fiscal") > 0 Then
-        DetectarTipoAnexo = "NF"
+    
+    If ext = ".pdf" Then
+        ' BOLETO
+        If InStr(nm, "boleto") > 0 Or InStr(nm, "linha digit") > 0 Then
+            DetectarTipoAnexo = "BOLETO"
+            Exit Function
+        End If
+        
+        ' NF: usa regex pra evitar falso positivo em "info"
+        Dim re As Object
+        Set re = CreateObject("VBScript.RegExp")
+        With re
+            .IgnoreCase = True
+            .Global = False
+            .Multiline = False
+            .pattern = "danfe|nfe|nota[\s_\-]*fiscal|(^|[^A-Za-z])nf(\d|[^A-Za-z]|$)"
+        End With
+        If re.Test(nm) Then
+            DetectarTipoAnexo = "NF"
+            Exit Function
+        End If
+        
+        ' PDF que não é BOLETO nem NF -> não baixar
+        DetectarTipoAnexo = "DESCONHECIDO"
         Exit Function
     End If
-    DetectarTipoAnexo = "NF"
+    
+    ' Outras extensões (se passarem pelo filtro) -> não baixar
+    DetectarTipoAnexo = "DESCONHECIDO"
 End Function
 
 Private Function SafeFileComponent(ByVal s As String) As String
@@ -1711,250 +2143,6 @@ End Function
 
 
 
-    Dim olApp As Outlook.Application
-    Dim olNamespace As Outlook.NameSpace
-    Dim olFolder As Outlook.MAPIFolder
-    Dim olSubFolder As Outlook.MAPIFolder
-    Dim olMail As Outlook.mailItem
-    Dim olAttachment As Outlook.Attachment
-    Dim pastaDestino As String
-    Dim anexosBaixados As Boolean
-    Dim item As Object
-    Dim nomeArquivo As String
-    Dim filteredItems As Outlook.items
-    
-    On Error GoTo TratamentoErro
-    
-    Set olApp = New Outlook.Application
-    Set olNamespace = olApp.GetNamespace("MAPI")
-    
-    pastaDestino = Environ$("USERPROFILE") & "\OneDrive - ALLOS\Área de Trabalho\Anexos\"
-    If Dir(pastaDestino, vbDirectory) = "" Then MkDir pastaDestino
-    
-    Set olFolder = olNamespace.GetDefaultFolder(olFolderInbox)
-    
-    ' Acesso seguro à subpasta
-    On Error Resume Next
-    Set olSubFolder = olNamespace.Folders("NFE")
-    If olSubFolder Is Nothing Then
-        Set olSubFolder = olFolder.Folders("NFE")
-    End If
-    If Not olSubFolder Is Nothing Then
-        Set olSubFolder = olSubFolder.Folders("01.NOTAS")
-    End If
-    On Error GoTo TratamentoErro
-    
-    If olSubFolder Is Nothing Then
-        MsgBox "Subpasta 'NFE > 01.NOTAS' não encontrada.", vbExclamation, "Erro"
-        GoTo Finalizar
-    End If
-    
-    anexosBaixados = False
-    
-    ' Filtro otimizado para não lidos
-    Set filteredItems = olSubFolder.items.Restrict("@SQL=""urn:schemas:httpmail:read"" = 0")
-    
-    For Each item In filteredItems
-        If TypeOf item Is Outlook.mailItem Then
-            Set olMail = item
-            For Each olAttachment In olMail.Attachments
-                If LCase(Right(olAttachment.fileName, 4)) = ".xml" Or LCase(Right(olAttachment.fileName, 4)) = ".pdf" Then
-                    nomeArquivo = pastaDestino & olAttachment.fileName
-                    
-                    If Dir(nomeArquivo) <> "" Then
-                        Dim contador As Integer
-                        contador = 1
-                        Do While Dir(Left(nomeArquivo, InStrRev(nomeArquivo, ".") - 1) & "_" & contador & Mid(nomeArquivo, InStrRev(nomeArquivo, "."))) <> ""
-                            contador = contador + 1
-                        Loop
-                        nomeArquivo = Left(nomeArquivo, InStrRev(nomeArquivo, ".") - 1) & "_" & contador & Mid(nomeArquivo, InStrRev(nomeArquivo, "."))
-                    End If
-                    
-                    olAttachment.SaveAsFile nomeArquivo
-                    anexosBaixados = True
-                End If
-            Next olAttachment
-            
-            ' Descomentar para marcar como lido
-            ' olMail.UnRead = False
-            ' olMail.Save
-        End If
-    Next item
-    
-    If anexosBaixados Then
-        MsgBox "Anexos baixados com sucesso!", vbInformation, "Sucesso"
-    Else
-        MsgBox "Nenhum anexo XML/PDF encontrado.", vbInformation, "Aviso"
-    End If
- 
-Finalizar:
-    Set olAttachment = Nothing
-    Set olMail = Nothing
-    Set olSubFolder = Nothing
-    Set olFolder = Nothing
-    Set olNamespace = Nothing
-    Set olApp = Nothing
-    If Not filteredItems Is Nothing Then Set filteredItems = Nothing
-    Exit Sub
- 
-TratamentoErro:
-    MsgBox "Erro " & Err.Number & ": " & Err.Description, vbCritical, "Falha"
-    Resume Finalizar
-End Sub
- 
 
-
-
-
-
-Sub ProcurarTextoNaColunaO()
-
-    Dim mailItem As Object
-    Dim selectedText As String
-    Dim excelApp As Object
-    Dim wb As Object
-    Dim ws As Object
-    Dim cell As Object
-    Dim wbName1 As String
-    Dim wbName2 As String
-    Dim encontrado As Boolean
-    Dim procurouPrimeiro As Boolean
-
-    ' === Obter item ativo e texto selecionado ===
-    On Error Resume Next
-    Set mailItem = Application.ActiveInspector.CurrentItem
-    On Error GoTo 0
-
-    If mailItem Is Nothing Then
-        MsgBox "Nenhum e-mail ativo.", vbExclamation
-        Exit Sub
-    End If
-
-    selectedText = Trim(Application.ActiveInspector.WordEditor.Application.Selection.Text)
-
-    ' Limpar caracteres invisíveis
-    selectedText = Replace(selectedText, vbCrLf, "")
-    selectedText = Replace(selectedText, vbLf, "")
-    selectedText = Replace(selectedText, vbCr, "")
-    selectedText = Replace(selectedText, Chr(160), "") ' espaço não separável
-    selectedText = Trim(selectedText)
-
-    If Len(selectedText) = 0 Then
-        MsgBox "Selecione um texto válido no corpo do e-mail.", vbExclamation
-        Exit Sub
-    End If
-
-    ' === Conectar ao Excel ===
-    Set excelApp = GetObject(, "Excel.Application")
-    If excelApp Is Nothing Then
-        MsgBox "Excel não está aberto.", vbCritical
-        Exit Sub
-    End If
-
-    ' === Nomes das planilhas (workbooks) ===
-    wbName1 = "Planilha de Chamados IARA+ 2025 v8 - 122025.xlsx"
-    wbName2 = "Planilha de Chamados IARA+ 2025 v8 - 012026.xlsx"
-
-    ' ===== Função local para obter workbook por nome exato entre os abertos =====
-    Dim FunctionGetWb As Object
-    ' (usaremos Set wb = Nothing e loop direto abaixo para evitar criar função separada)
-
-    ' === Tenta procurar no primeiro workbook (122025) ===
-    Set wb = Nothing
-    Dim wbLoop As Object
-    For Each wbLoop In excelApp.Workbooks
-        If wbLoop.Name = wbName1 Then
-            Set wb = wbLoop
-            Exit For
-        End If
-    Next wbLoop
-
-    procurouPrimeiro = False
-    encontrado = False
-
-    If Not wb Is Nothing Then
-        procurouPrimeiro = True
-
-        ' Tenta obter a aba
-        On Error Resume Next
-        Set ws = wb.Sheets("Preechimento") ' ajuste se o nome correto for "Preenchimento"
-        On Error GoTo 0
-
-        If Not ws Is Nothing Then
-            For Each cell In ws.Range("O1:O3000")
-                If StrComp(Trim(CStr(cell.Value)), selectedText, vbTextCompare) = 0 Then
-                    encontrado = True
-                    MsgBox "Texto encontrado na célula " & cell.Address & _
-                           " da aba '" & ws.Name & "' em '" & wb.Name & "'.", vbInformation
-                    excelApp.Visible = True
-                    wb.Activate
-                    ws.Activate
-                    cell.Select
-                    cell.Application.GoTo cell, True
-                    Exit Sub
-                End If
-            Next cell
-        End If
-        ' Se chegou aqui, não encontrou no primeiro workbook (ou aba inexistente)
-    End If
-
-    ' === Tenta procurar no segundo workbook (012026) ===
-    Set wb = Nothing
-    For Each wbLoop In excelApp.Workbooks
-        If wbLoop.Name = wbName2 Then
-            Set wb = wbLoop
-            Exit For
-        End If
-    Next wbLoop
-
-    If Not wb Is Nothing Then
-        On Error Resume Next
-        Set ws = wb.Sheets("Preechimento") ' ajuste se o nome correto for "Preenchimento"
-        On Error GoTo 0
-
-        If Not ws Is Nothing Then
-            For Each cell In ws.Range("O1:O3000")
-                If StrComp(Trim(CStr(cell.Value)), selectedText, vbTextCompare) = 0 Then
-                    encontrado = True
-                    MsgBox "Texto encontrado na célula " & cell.Address & _
-                           " da aba '" & ws.Name & "' em '" & wb.Name & "'.", vbInformation
-                    excelApp.Visible = True
-                    wb.Activate
-                    ws.Activate
-                    cell.Select
-                    cell.Application.GoTo cell, True
-                    Exit Sub
-                End If
-            Next cell
-        End If
-    End If
-
-    ' === Mensagens finais conforme resultados ===
-    If Not encontrado Then
-        Dim infoPlanilhas As String
-
-        ' Monta informação sobre disponibilidade dos arquivos
-        Dim aberto1 As Boolean, aberto2 As Boolean
-        aberto1 = False: aberto2 = False
-        For Each wbLoop In excelApp.Workbooks
-            If wbLoop.Name = wbName1 Then aberto1 = True
-            If wbLoop.Name = wbName2 Then aberto2 = True
-        Next wbLoop
-
-        If Not aberto1 And Not aberto2 Then
-            infoPlanilhas = " (Observação: nenhuma das duas planilhas está aberta no Excel.)"
-        ElseIf Not aberto1 Then
-            infoPlanilhas = " (Observação: a planilha '" & wbName1 & "' não está aberta.)"
-        ElseIf Not aberto2 Then
-            infoPlanilhas = " (Observação: a planilha '" & wbName2 & "' não está aberta.)"
-        Else
-            infoPlanilhas = ""
-        End If
-
-        MsgBox "Texto '" & selectedText & "' NÃO foi encontrado em nenhuma das duas planilhas:" & vbCrLf & _
-               " - " & wbName1 & vbCrLf & " - " & wbName2 & infoPlanilhas, vbInformation
-    End If
-
-End Sub
 
 
